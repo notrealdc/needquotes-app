@@ -132,9 +132,18 @@ export default function Home() {
     }
   }
 
+  function isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
   async function submitContractor() {
     if (!contractorData.name || !contractorData.email || !contractorData.phone || !contractorData.specialty || !contractorData.service_area) {
       alert('Please fill in all required fields.')
+      return
+    }
+    if (!isValidEmail(contractorData.email)) {
+      alert('Please enter a valid email address.')
       return
     }
     setContractorSubmitting(true)
