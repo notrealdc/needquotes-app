@@ -110,6 +110,19 @@ export default function Home() {
 
       if (error) throw error
       setLeadId(data.id)
+
+      // Trigger email notifications to contractors
+      try {
+        await fetch('/api/lead/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ leadId: data.id }),
+        })
+      } catch (e) {
+        // Non-blocking — don't affect user experience
+        console.error('Email trigger error:', e)
+      }
+
       setStep('success')
     } catch (err) {
       console.error('Lead submission error:', err)
