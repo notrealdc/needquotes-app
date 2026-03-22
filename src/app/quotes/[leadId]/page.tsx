@@ -120,7 +120,7 @@ export default function QuotesPage() {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>${(bid.estimate_cents / 100).toLocaleString()}</div>
-                        <div style={{ color: '#94A3B8', fontSize: 13 }}">Est. {(bid.estimate_cents / 100).toLocaleString()} total</div>
+                        <div style={{ color: '#94A3B8', fontSize: 13 }}>Est. {(bid.estimate_cents / 100).toLocaleString()} total</div>
                       </div>
                     </div>
 
