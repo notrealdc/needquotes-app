@@ -4,7 +4,7 @@ import { useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { TRADE_CONFIG, getQuestionsForProblem, calculateLeadScore } from '@/lib/questionnaire'
 
-type Step = 'trade' | 'problem' | 'quiz' | 'contact' | 'success'
+type Step = 'trade' | 'problem' | 'quiz' | 'contact' | 'success' | 'contractor'
 
 const LEAD_SCORE_LABELS: Record<string, string> = {
   urgent: '🔥 Hot Lead — Call immediately',
@@ -25,6 +25,13 @@ export default function Home() {
   const [leadScore, setLeadScore] = useState(0)
   const [leadId, setLeadId] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Contractor signup state
+  const [contractorData, setContractorData] = useState({
+    name: '', company: '', email: '', phone: '', specialty: '', service_area: '', license_info: '', website: ''
+  })
+  const [contractorSubmitting, setContractorSubmitting] = useState(false)
+  const [contractorSuccess, setContractorSuccess] = useState(false)
 
   const questions = selectedTrade && selectedProblem ? getQuestionsForProblem(selectedTrade, selectedProblem) : []
   const currentQuestion = questions[currentQuestionIndex]
@@ -109,6 +116,24 @@ export default function Home() {
       alert('Something went wrong. Please try again.')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  async function submitContractor() {
+    if (!contractorData.name || !contractorData.email || !contractorData.phone || !contractorData.specialty || !contractorData.service_area) {
+      alert('Please fill in all required fields.')
+      return
+    }
+    setContractorSubmitting(true)
+    try {
+      const { error } = await supabase.from('contractors').insert(contractorData)
+      if (error) throw error
+      setContractorSuccess(true)
+    } catch (err) {
+      console.error('Contractor submission error:', err)
+      alert('Something went wrong. Please try again.')
+    } finally {
+      setContractorSubmitting(false)
     }
   }
 
@@ -372,6 +397,85 @@ export default function Home() {
       )
     }
 
+    if (step === 'contractor') {
+      if (contractorSuccess) {
+        return (
+          <div className="success-screen">
+            <div className="success-icon">🏗️</div>
+            <h2>You're In!</h2>
+            <p>
+              Welcome to the NeedQuotes contractor network. Our team will review your application and get back to you within 24 hours. Once approved, you'll start receiving exclusive leads in your area.
+            </p>
+            <div className="score-display">
+              Application received — we're reviewing now
+            </div>
+          </div>
+        )
+      }
+      return (
+        <div className="form-section">
+          <div className="section-label">Contractor Signup</div>
+          <h2 className="section-title">Join Our Contractor Network</h2>
+          <p className="section-sub">Get exclusive, pre-qualified leads in your service area</p>
+
+          <div className="question-block">
+            <label>Your Name *</label>
+            <input type="text" placeholder="Full name" value={contractorData.name} onChange={e => setContractorData(prev => ({ ...prev, name: e.target.value }))} />
+          </div>
+          <div className="question-block">
+            <label>Company Name *</label>
+            <input type="text" placeholder="Company name" value={contractorData.company} onChange={e => setContractorData(prev => ({ ...prev, company: e.target.value }))} />
+          </div>
+          <div className="contact-fields">
+            <div className="row">
+              <div className="question-block" style={{ marginBottom: 0 }}>
+                <label>Email *</label>
+                <input type="email" placeholder="email@company.com" value={contractorData.email} onChange={e => setContractorData(prev => ({ ...prev, email: e.target.value }))} />
+              </div>
+              <div className="question-block" style={{ marginBottom: 0 }}>
+                <label>Phone *</label>
+                <input type="tel" placeholder="+1 (555) 000-0000" value={contractorData.phone} onChange={e => setContractorData(prev => ({ ...prev, phone: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+
+          <div className="question-block" style={{ marginTop: 16 }}>
+            <label>Specialty / Trade *</label>
+            <div className="option-list">
+              {TRADE_CONFIG.trades.map(trade => (
+                <div key={trade} className={`option-pill ${contractorData.specialty === trade ? 'selected' : ''}`} onClick={() => setContractorData(prev => ({ ...prev, specialty: trade }))}>
+                  <div className="radio" />
+                  {trade}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="question-block">
+            <label>Service Area (ZIP codes or cities you serve) *</label>
+            <input type="text" placeholder="e.g. 30004, 30075, or Atlanta Metro" value={contractorData.service_area} onChange={e => setContractorData(prev => ({ ...prev, service_area: e.target.value }))} />
+          </div>
+
+          <div className="question-block">
+            <label>License / Insurance Info (optional)</label>
+            <input type="text" placeholder="e.g. GA License #123456, Insured" value={contractorData.license_info} onChange={e => setContractorData(prev => ({ ...prev, license_info: e.target.value }))} />
+          </div>
+
+          <div className="question-block">
+            <label>Website (optional)</label>
+            <input type="text" placeholder="https://yourcompany.com" value={contractorData.website} onChange={e => setContractorData(prev => ({ ...prev, website: e.target.value }))} />
+          </div>
+
+          <button className="btn-secondary" onClick={() => setStep('trade')}>
+            ← Back
+          </button>
+          <button className="btn-primary" onClick={submitContractor} disabled={contractorSubmitting}>
+            {contractorSubmitting ? 'Submitting...' : '🏗️ Join the Network →'}
+          </button>
+        </div>
+      )
+    }
+
     return null
   }
 
@@ -393,6 +497,7 @@ export default function Home() {
             {step === 'problem' && <>What's the specific issue?</>}
             {step === 'quiz' && <>A few quick questions</>}
             {step === 'contact' && <>Almost there!</>}
+            {step === 'contractor' && <>Join Our Contractor Network</>}
           </h1>
           {step === 'trade' && (
             <p>Answer a few questions, upload a photo, and get matched with top-rated local contractors who compete for your job.</p>
@@ -442,7 +547,7 @@ export default function Home() {
       <div className="contractor-cta">
         <h3>Are You a Contractor?</h3>
         <p>Get exclusive, pre-qualified leads in your service area. Pay only for leads that match your specialty.</p>
-        <button className="btn-secondary">Join as a Contractor →</button>
+        <button className="btn-secondary" onClick={() => setStep('contractor')}>Join as a Contractor →</button>
       </div>
 
       <footer>
