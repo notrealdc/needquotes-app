@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendLeadNotificationToContractors, sendQuotesReadyToHomeowner } from '@/lib/email'
+import { createHubSpotContact } from '@/lib/hubspot'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,6 +32,19 @@ export async function POST(req: NextRequest) {
       .eq('status', 'pending')
 
     const selectedContractors = (contractors || []).slice(0, 3)
+
+    // Fire HubSpot contact + deal creation (non-blocking)
+    createHubSpotContact({
+      name: lead.name,
+      email: lead.email,
+      phone: lead.phone,
+      zip_code: lead.zip_code,
+      trade: lead.trade,
+      problem_type: lead.problem_type,
+      timeline: lead.timeline,
+      budget_range: lead.budget_range,
+      description: lead.description,
+    }).catch(err => console.error('HubSpot error:', err))
 
     const emailPromises = selectedContractors.map(async (contractor) => {
       await supabase.from('lead_assignments').insert({
