@@ -15,25 +15,38 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { leadId } = body
 
-    if (!leadId) return NextResponse.json({ error: 'Missing leadId' }, { status: 400 })
+    if (!leadId) {
+      return NextResponse.json({ error: 'Missing leadId' }, { status: 400 })
+    }
 
-    const { data: lead } = await supabase
+    // Fetch lead
+    const { data: lead, error: leadError } = await supabase
       .from('leads')
       .select('*')
       .eq('id', leadId)
       .single()
 
-    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+    if (leadError || !lead) {
+      console.error('Lead fetch error:', leadError)
+      return NextResponse.json({ error: 'Lead not found', details: leadError }, { status: 404 })
+    }
 
-    const { data: contractors } = await supabase
+    // Fetch contractors
+    const { data: contractors, error: contractorError } = await supabase
       .from('contractors')
       .select('*')
       .eq('specialty', lead.trade)
       .eq('status', 'pending')
 
-    const selectedContractors = (contractors || []).slice(0, 3)
+    if (contractorError) {
+      console.error('Contractor fetch error:', contractorError)
+      return NextResponse.json({ error: 'Failed to fetch contractors', details: contractorError }, { status: 500 })
+    }
 
-    // Fire HubSpot contact + deal creation (non-blocking)
+    const selectedContractors = (contractors || []).slice(0, 3)
+    console.log(`Found ${selectedContractors.length} contractors for ${lead.trade}:`, selectedContractors.map(c => c.email))
+
+    // Create HubSpot contact + deal (non-blocking — won't fail the email flow)
     createHubSpotContact({
       name: lead.name,
       email: lead.email,
@@ -44,55 +57,73 @@ export async function POST(req: NextRequest) {
       timeline: lead.timeline,
       budget_range: lead.budget_range,
       description: lead.description,
-    }).catch(err => console.error('HubSpot error:', err))
+    }).catch(err => console.error('HubSpot error (non-blocking):', err))
 
-    const emailPromises = selectedContractors.map(async (contractor) => {
-      await supabase.from('lead_assignments').insert({
-        lead_id: leadId,
-        contractor_id: contractor.id,
-        status: 'notified',
-      })
+    // Send emails to contractors
+    const emailErrors: string[] = []
+    for (const contractor of selectedContractors) {
+      try {
+        await supabase.from('lead_assignments').insert({
+          lead_id: leadId,
+          contractor_id: contractor.id,
+          status: 'notified',
+        })
 
-      const bidUrl = `${APP_URL}/contractor/bid/${leadId}?c=${contractor.id}`
+        const bidUrl = `${APP_URL}/contractor/bid/${leadId}?c=${contractor.id}`
+        console.log(`Sending email to ${contractor.email} with bidUrl: ${bidUrl}`)
 
-      return sendLeadNotificationToContractors({
-        contractorEmail: contractor.email,
-        contractorName: contractor.name,
-        leadName: lead.name,
-        leadPhone: lead.phone,
-        trade: lead.trade,
-        problemType: lead.problem_type,
-        zipCode: lead.zip_code,
-        timeline: lead.timeline,
-        budget: lead.budget_range || '',
-        description: lead.description || undefined,
-        bidUrl,
-      })
-    })
+        await sendLeadNotificationToContractors({
+          contractorEmail: contractor.email,
+          contractorName: contractor.name,
+          leadName: lead.name,
+          leadPhone: lead.phone,
+          trade: lead.trade,
+          problemType: lead.problem_type,
+          zipCode: lead.zip_code,
+          timeline: lead.timeline,
+          budget: lead.budget_range || '',
+          description: lead.description || undefined,
+          bidUrl,
+        })
+        console.log(`Email sent to ${contractor.email}`)
+      } catch (emailErr) {
+        const msg = `Failed to email ${contractor.email}: ${emailErr}`
+        console.error(msg)
+        emailErrors.push(msg)
+      }
+    }
 
-    await Promise.all(emailPromises)
-
+    // Update lead status
     if (selectedContractors.length > 0) {
       await supabase.from('leads').update({ status: 'contractors_notified' }).eq('id', leadId)
 
       if (lead.email) {
         const quotesUrl = `${APP_URL}/quotes/${leadId}?code=${leadId.slice(0, 8)}`
-        await sendQuotesReadyToHomeowner({
-          homeownerEmail: lead.email,
-          homeownerName: lead.name,
-          trade: lead.trade,
-          problemType: lead.problem_type,
-          timeline: lead.timeline,
-          zipCode: lead.zip_code,
-          quotesUrl,
-          contractorCount: selectedContractors.length,
-        })
+        try {
+          await sendQuotesReadyToHomeowner({
+            homeownerEmail: lead.email,
+            homeownerName: lead.name,
+            trade: lead.trade,
+            problemType: lead.problem_type,
+            timeline: lead.timeline,
+            zipCode: lead.zip_code,
+            quotesUrl,
+            contractorCount: selectedContractors.length,
+          })
+          console.log(`Confirmation email sent to homeowner ${lead.email}`)
+        } catch (homeErr) {
+          console.error(`Failed to send homeowner email: ${homeErr}`)
+        }
       }
     }
 
-    return NextResponse.json({ success: true, contractorsNotified: selectedContractors.length })
+    return NextResponse.json({
+      success: true,
+      contractorsNotified: selectedContractors.length,
+      emailErrors,
+    })
   } catch (err) {
-    console.error('Lead submit error:', err)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+    console.error('Lead submit route error:', err)
+    return NextResponse.json({ error: 'Internal error', details: String(err) }, { status: 500 })
   }
 }
