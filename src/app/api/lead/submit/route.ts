@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
       await sgMail.send({
         to: contractor.email,
-        from: 'NeedQuotes <zane231@gmail.com>',
+        from: 'NeedQuotes <zane47231@gmail.com>',
         subject: `New Lead: ${lead.trade} - ${lead.problem_type} in ZIP ${lead.zip_code}`,
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
         const quotesUrl = `${APP_URL}/quotes/${leadId}?code=${leadId.slice(0, 8)}`
         await sgMail.send({
           to: lead.email,
-          from: 'NeedQuotes <zane231@gmail.com>',
+          from: 'NeedQuotes <zane47231@gmail.com>',
           subject: `${selectedContractors.length} Contractors Are Preparing Your Quotes! ⏱️`,
           html: `
             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -101,4 +101,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }
+
 
