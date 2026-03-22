@@ -10,6 +10,8 @@ const supabase = createClient(
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://needquotes-app.vercel.app'
 
+const VALID_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -27,11 +29,10 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (leadError || !lead) {
-      console.error('Lead fetch error:', leadError)
-      return NextResponse.json({ error: 'Lead not found', details: leadError }, { status: 404 })
+      return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
     }
 
-    // Fetch contractors
+    // Fetch and filter contractors — only those with valid emails
     const { data: contractors, error: contractorError } = await supabase
       .from('contractors')
       .select('*')
@@ -40,13 +41,16 @@ export async function POST(req: NextRequest) {
 
     if (contractorError) {
       console.error('Contractor fetch error:', contractorError)
-      return NextResponse.json({ error: 'Failed to fetch contractors', details: contractorError }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to fetch contractors' }, { status: 500 })
     }
 
-    const selectedContractors = (contractors || []).slice(0, 3)
-    console.log(`Found ${selectedContractors.length} contractors for ${lead.trade}:`, selectedContractors.map(c => c.email))
+    const selectedContractors = (contractors || [])
+      .filter(c => VALID_EMAIL.test(c.email))
+      .slice(0, 3)
 
-    // Create HubSpot contact + deal (non-blocking — won't fail the email flow)
+    console.log(`[Lead Submit] ${lead.name} (${lead.trade}) — ${selectedContractors.length} contractors matched`)
+
+    // Create HubSpot contact + deal (non-blocking)
     createHubSpotContact({
       name: lead.name,
       email: lead.email,
@@ -70,7 +74,6 @@ export async function POST(req: NextRequest) {
         })
 
         const bidUrl = `${APP_URL}/contractor/bid/${leadId}?c=${contractor.id}`
-        console.log(`Sending email to ${contractor.email} with bidUrl: ${bidUrl}`)
 
         await sendLeadNotificationToContractors({
           contractorEmail: contractor.email,
@@ -85,7 +88,7 @@ export async function POST(req: NextRequest) {
           description: lead.description || undefined,
           bidUrl,
         })
-        console.log(`Email sent to ${contractor.email}`)
+        console.log(`[Email] Sent to ${contractor.email}`)
       } catch (emailErr) {
         const msg = `Failed to email ${contractor.email}: ${emailErr}`
         console.error(msg)
@@ -93,7 +96,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Update lead status
+    // Update lead status + send homeowner confirmation
     if (selectedContractors.length > 0) {
       await supabase.from('leads').update({ status: 'contractors_notified' }).eq('id', leadId)
 
@@ -110,9 +113,9 @@ export async function POST(req: NextRequest) {
             quotesUrl,
             contractorCount: selectedContractors.length,
           })
-          console.log(`Confirmation email sent to homeowner ${lead.email}`)
+          console.log(`[Email] Confirmation sent to homeowner ${lead.email}`)
         } catch (homeErr) {
-          console.error(`Failed to send homeowner email: ${homeErr}`)
+          console.error(`Homeowner email failed: ${homeErr}`)
         }
       }
     }

@@ -16,7 +16,7 @@ async function sendGmail(params: {
 
   const email_lines = [
     `To: ${params.to}`,
-    `From: NeedQuotes <junkdc14@gmail.com>`,
+    `From: <junkdc14@gmail.com>`,
     `Subject: ${params.subject}`,
     'Content-Type: text/html; charset=utf-8',
     '',

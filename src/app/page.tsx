@@ -148,8 +148,13 @@ export default function Home() {
     }
     setContractorSubmitting(true)
     try {
-      const { error } = await supabase.from('contractors').insert(contractorData)
-      if (error) throw error
+      const res = await fetch('/api/contractor/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contractorData),
+      })
+      const result = await res.json()
+      if (!res.ok || result.error) throw new Error(result.error || 'Signup failed')
       setContractorSuccess(true)
     } catch (err) {
       console.error('Contractor submission error:', err)
@@ -589,3 +594,4 @@ const TRADE_ICONS: Record<string, string> = {
   Landscaping: '🌿',
   General: '🔨',
 }
+
